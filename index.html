@@ -1,32 +1,176 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>file.d documentation</title>
-  <link rel="icon" type="image/png" href="/file.d/static/file.d.png" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-  <meta name="description" content="A blazing fast tool for building data pipelines: read, process, and output events.">
-  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-  <link rel="stylesheet" href="//unpkg.com/docsify/lib/themes/vue.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Мобильный платформер</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+    </style>
 </head>
 <body>
-  <div id="app"></div>
-  <script>
-    window.$docsify = {
-      name: 'file.d',
-      repo: 'https://github.com/ozontech/file.d',
-      loadSidebar: true,
-      loadNavbar: true,
-      subMaxLevel: 2,
-      maxLevel: 1,
-      coverpage: true,
-      auto2top: true,
-      markdown: {
-        gfm: true
-      }
-    }
-  </script>
-  <script src="//unpkg.com/docsify/lib/docsify.min.js"></script>
-  <script src="//unpkg.com/docsify-copy-code"></script>
+    <script>
+        const config = {
+            type: Phaser.AUTO,
+            width: 800,
+            height: 600,
+            physics: {
+                default: 'arcade',
+                arcade: { gravity: { y: 300 }, debug: false }
+            },
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            }
+        };
+
+        const game = new Phaser.Game(config);
+        let player, platforms, cursors, score = 0, scoreText;
+
+        function preload() {
+            this.load.image('sky', 'https://labs.phaser.io/assets/skies/space3.png');
+            this.load.image('ground', 'https://labs.phaser.io/assets/platforms/grass.png');
+            this.load.image('coin', 'https://labs.phaser.io/assets/sprites/coin.png');
+            this.load.spritesheet('dude', 'https://labs.phaser.io/assets/sprites/dude.png', 
+                { frameWidth: 32, frameHeight: 48 }
+            );
+        }
+
+        function create() {
+            // Фон
+            this.add.image(400, 300, 'sky');
+
+            // Платформы
+            platforms = this.physics.add.staticGroup();
+            platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+            platforms.create(600, 400, 'ground');
+            platforms.create(50, 250, 'ground');
+            platforms.create(750, 220, 'ground');
+
+            // Игрок
+            player = this.physics.add.sprite(100, 450, 'dude');
+            player.setCollideWorldBounds(true);
+            player.setBounce(0.2);
+
+            // Анимации
+            this.anims.create({
+                key: 'left',
+                frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+                frameRate: 10,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'right',
+                frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+                frameRate: 10,
+                repeat: -1
+            });
+
+            // Монетки
+            const coins = this.physics.add.group();
+            for (let i = 0; i < 10; i++) {
+                coins.create(Phaser.Math.Between(50, 750), Phaser.Math.Between(50, 300), 'coin');
+            }
+
+            // Физика
+            this.physics.add.collider(player, platforms);
+            this.physics.add.overlap(player, coins, collectCoin, null, this);
+
+            // Счёт
+            scoreText = this.add.text(16, 16, 'Монет: 0', { fontSize: '32px', fill: '#FFF' });
+
+            // Управление (для ПК)
+            cursors = this.input.keyboard.createCursorKeys();
+
+            // Мобильное управление (джойстик)
+            if (this.sys.game.device.os.android || this.sys.game.device.os.iOS) {
+                addMobileControls(this);
+            }
+        }
+
+        function update() {
+            // Управление с клавиатуры
+            if (cursors.left.isDown) {
+                player.setVelocityX(-160);
+                player.anims.play('left', true);
+            } else if (cursors.right.isDown) {
+                player.setVelocityX(160);
+                player.anims.play('right', true);
+            } else {
+                player.setVelocityX(0);
+                player.anims.stop();
+            }
+
+            if ((cursors.up.isDown || player.body.touching.down) && player.body.onFloor()) {
+                player.setVelocityY(-330);
+            }
+        }
+
+        function collectCoin(player, coin) {
+            coin.disableBody(true, true);
+            score += 1;
+            scoreText.setText('Монет: ' + score);
+        }
+
+        // Мобильное управление (джойстик)
+        function addMobileControls(scene) {
+            const joystick = {
+                base: scene.add.circle(100, 500, 50, 0x888888, 0.5),
+                thumb: scene.add.circle(100, 500, 25, 0xCCCCCC, 0.8)
+            };
+
+            joystick.base.setInteractive();
+            joystick.thumb.setInteractive();
+
+            scene.input.on('pointerdown', (pointer) => {
+                if (pointer.y > 400) { // Нижняя часть экрана
+                    joystick.base.x = pointer.x;
+                    joystick.base.y = pointer.y;
+                    joystick.thumb.x = pointer.x;
+                    joystick.thumb.y = pointer.y;
+                }
+            });
+
+            scene.input.on('pointermove', (pointer) => {
+                if (pointer.isDown && pointer.y > 400) {
+                    const angle = Phaser.Math.Angle.Between(
+                        joystick.base.x, joystick.base.y,
+                        pointer.x, pointer.y
+                    );
+                    const dist = Phaser.Math.Distance.Between(
+                        joystick.base.x, joystick.base.y,
+                        pointer.x, pointer.y
+                    );
+                    const maxDist = 50;
+
+                    if (dist > maxDist) {
+                        joystick.thumb.x = joystick.base.x + Math.cos(angle) * maxDist;
+                        joystick.thumb.y = joystick.base.y + Math.sin(angle) * maxDist;
+                    } else {
+                        joystick.thumb.x = pointer.x;
+                        joystick.thumb.y = pointer.y;
+                    }
+
+                    // Движение игрока
+                    const speed = 160;
+                    player.setVelocityX(Math.cos(angle) * speed);
+                    if (angle < -0.5 || angle > 0.5) {
+                        player.anims.play('left', true);
+                    } else {
+                        player.anims.play('right', true);
+                    }
+                }
+            });
+
+            scene.input.on('pointerup', () => {
+                player.setVelocityX(0);
+                player.anims.stop();
+                joystick.thumb.x = joystick.base.x;
+                joystick.thumb.y = joystick.base.y;
+            });
+        }
+    </script>
 </body>
 </html>
